@@ -1,0 +1,202 @@
+Independent Digital Forensic Examination
+1. Scope and evidence examined
+Seven ZIP archives were supplied. All seven were accessible, and their ZIP directories were successfully enumerated. The examination was conducted without executing the supplied programs, scripts, or links.
+
+The materials include Windows Registry artifacts, event logs, Prefetch data, user-profile files, downloads, and forensic tool reports. The RegRipper metadata identifies a source image named img_Case001_PostIncident.vhd; that name is treated as a source identifier, not proof that an incident occurred.
+Evidence inventory
+Attachment	Contents identified	Examination status
+regripper reports complete.zip	32 entries; Registry interpretation reports and error logs	Selected reports read
+Reports.zip	Excel workbook and text-based file report	Contents inventoried; detailed analysis pending
+winevt - prefetch.zip	629 entries; Windows event logs, Prefetch and related artifacts	File inventory and selected filenames examined
+16831-Downloads.zip	6 entries; batch script, Zone.Identifier, Thunderbird installer and SmartScreen-related file	Script and metadata read; executable not run
+AppData.zip	5,248 entries; application data, caches and databases	File inventory examined; databases not yet parsed
+config.zip	316 entries; system Registry hives, logs and slack	File inventory examined; hives not yet independently parsed
+NTUSER.zip	3 entries; NTUSER.DAT and two empty transaction-log files	File inventory examined; hive not yet independently parsed
+
+Coverage qualification: Access to an archive does not mean that every record within it has been examined. The findings below distinguish inspected content from artifacts identified only by filename or ZIP metadata.
+2. Executive assessment
+The examined evidence establishes the presence of a Windows batch script capable of changing a current-user Registry policy to disable Task Manager. The script is associated with a Zone.Identifier stream containing an Internet-zone designation and a source URL.
+
+The evidence examined so far does not establish that the script executed, that the Registry modification succeeded, or that the system was compromised.
+
+Separately, the Registry reports and Prefetch filenames identify Mozilla Thunderbird installation and application artifacts. These are consistent with ordinary software installation and use, although the Prefetch contents have not yet been decoded to establish execution counts or timestamps.
+
+The main issue requiring further examination is whether the Task Manager policy was actually changed and, if so, when and by what mechanism.
+3. Findings, with source references and confidence
+Finding 1 — Batch script capable of disabling Task Manager
+Direct observation
+
+Source: 16831-Downloads.zip → 16831-Downloads/16835-free-holidays.bat
+
+The script contains:
+@echo off
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /t REG_DWORD /d 1 /f
+exit /b
+
+
+The command is written to set DisableTaskMgr to DWORD value 1 under the current user's Registry hive.
+
+Interpretation
+
+Successful execution in an applicable Windows environment would configure a policy restricting access to Task Manager for the account under which the command runs.
+
+This supports a finding of potentially consequential configuration-changing script content. It does not establish execution, success, persistence of the setting, or malicious intent.
+
+Confidence: High regarding the script's contents and intended technical effect. Low regarding whether the command actually ran, because no execution record has yet been confirmed.
+
+Alternative explanations include an administrative restriction, a demonstration, an experiment, or an intentionally disruptive script.
+Finding 2 — Internet-zone metadata associated with the script
+Direct observation
+
+Source: 16831-Downloads.zip → 16831-Downloads/16836-free-holidays.bat_Zone.Identifier
+[ZoneTransfer]
+ZoneId=3
+HostUrl=https://chrysanthou.cy/free-holidays/
+
+
+Interpretation
+
+The metadata is consistent with the script being associated with an Internet-zone source. The URL is an attribution recorded in the metadata, not independently verified network evidence.
+
+It does not prove that a browser downloaded the file, that the URL served the examined bytes, that the site was malicious, or that anyone opened or executed the script.
+
+Confidence: High for the metadata's contents; moderate for the Internet-origin interpretation because the provenance and integrity of the metadata have not been independently corroborated.
+Finding 3 — No confirmed Task Manager policy change in the inspected RegRipper report
+Direct observation
+
+Source: regripper reports complete.zip → reg_0_0/NTUSER.DAT-regripper-16869-full.txt, disabletools section.
+
+The report states:
+Software\Microsoft\Windows\Policies\System not found.
+
+
+The report does not contain an identified DisableTaskMgr value.
+
+Interpretation
+
+This is not proof that the script never executed. Notably, the reported missing key is Software\Microsoft\Windows\Policies\System, whereas the script targets Software\Microsoft\Windows\CurrentVersion\Policies\System.
+
+The report therefore does not directly resolve the script's target value. A direct Registry examination is required.
+
+Confidence: High for what the report says; low for any conclusion about the actual state of DisableTaskMgr.
+Finding 4 — Thunderbird installation and application artifacts
+Direct observations
+
+Sources:
+- 16831-Downloads.zip → 16831-Downloads/16837-Thunderbird Setup 158.0.exe
+- winevt - prefetch.zip → prefetch1/THUNDERBIRD SETUP 158.0.EXE-820B251D.pf
+- winevt - prefetch.zip → prefetch1/THUNDERBIRD.EXE-5119524C.pf
+- regripper reports complete.zip → reg_0_0/SOFTWARE-regripper-81543-autopsy.txt, uninstall section
+The uninstall report contains entries for Mozilla Maintenance Service version 158.0 and Mozilla Thunderbird version 158.0.1.
+
+Interpretation
+
+These artifacts are consistent with Thunderbird installation and subsequent application activity. The installer filename, installed application version, and Prefetch filenames are related but should not be treated as proof that the supplied installer was the exact binary used for installation.
+
+Prefetch filenames alone are not a complete execution reconstruction. Their internal execution data remains unexamined.
+
+Confidence: High for artifact presence; moderate for the installation interpretation; low for any precise execution sequence.
+
+No evidence examined so far establishes a connection between Thunderbird and the batch script.
+Finding 5 — File-system timestamps for the batch script
+Direct observation
+
+Source: Reports.zip → Reports/Win10-baseline Files - Text 11-17-2026-08-12-37/file-report.txt, rows 7,734–7,735 (header at row 1).
+
+The report contains two records:
+Attribute	Batch script	Zone.Identifier
+Source row	7,734	7,735
+Created	2026-10-22 01:09:38 EEST	Same
+Modified	2026-10-22 01:09:42 EEST	Same
+Accessed	2026-10-22 01:10:44 EEST	Same
+Size	131 bytes	73 bytes
+
+Reported source path:
+
+/img_Case001_PostIncident.vhd/vol_vol3/Users/Greg/Downloads/free-holidays.bat
+
+The report also contains hash values for these records, but their algorithms have not been independently verified.
+
+Interpretation
+
+The file-system records place the script and its associated metadata in the reported Downloads directory on October 22, 2026.
+
+The close timestamps are consistent with related file creation or handling. They do not demonstrate script execution. The reported last-access time is not sufficient to establish that a person opened or ran the file.
+
+Confidence: High for the reported metadata; moderate for the underlying chronology because the original file-system structures and clock accuracy have not been independently validated.
+4. Chronological timeline
+The following timeline uses timestamps reported by the forensic tools. The file report explicitly labels its times EEST (UTC+03:00). The RegRipper reports include both human-readable times without an explicit timezone and entries marked Z (UTC). Unlabelled RegRipper timestamps are not converted or assumed to be EEST.
+Reported time	Event or artifact	Evidential significance
+2026-10-20 14:46:26, timezone unspecified	Windows installation date reported in SOFTWARE-regripper-81543-autopsy.txt, WinVersion	System installation metadata, not necessarily first use
+2026-10-21 18:55:27, timezone unspecified	Mozilla Maintenance Service Registry entry timestamp	Consistent with software installation activity
+2026-10-21 21:16:56, timezone unspecified	Thunderbird 158.0.1 uninstall entry timestamp	Supports installed-software presence
+2026-10-22 01:09:38 EEST	free-holidays.bat and associated stream reported created	File-system creation, not execution
+2026-10-22 01:09:42 EEST	Both records reported modified	File-system modification
+2026-10-22 01:10:44 EEST	Both records reported last accessed	Access metadata, not a confirmed user action
+
+The chronology does not establish that the Thunderbird activity caused, preceded in absolute time, or was otherwise connected with the script activity. The differing timezone representations require normalization before making precise cross-source comparisons.
+5. Correlations, contradictions, and alternative explanations
+Script and Internet metadata: The batch script and its Zone.Identifier are consistent with an Internet-origin file. However, no examined browser-history record, download transaction, or network event independently corroborates the source URL.
+
+Script and Registry state: The script targets HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System. The inspected RegRipper output reports a different missing key. Therefore, no reliable conclusion about the actual DisableTaskMgr value can be drawn from that report.
+
+Thunderbird artifacts: Installer presence, Registry entries, and Prefetch filenames provide mutually consistent indications of software installation and activity. They do not establish a relationship with the batch script.
+
+Possible benign explanations: The script could have been downloaded for inspection, training, administrative testing, or demonstration. Its filename and source metadata alone do not resolve purpose or intent.
+
+No confirmed contradiction establishes that any artifact is fabricated or that the system was compromised.
+6. Limitations and questions the evidence cannot answer
+This is a partial content examination, not a completed forensic review of all seven archives.
+
+Important outstanding limitations include:
+- The Excel workbook in Reports.zip was identified but not opened or analyzed at worksheet level.
+- The EVTX records in winevt - prefetch.zip were not decoded. No event IDs, event-record timestamps, or process-creation events have been verified.
+- Prefetch filenames were inspected, but internal execution counts, run timestamps, and referenced files were not decoded.
+- The Registry hives in config.zip and NTUSER.zip were not independently parsed. RegRipper reports are secondary interpretations and may omit keys or values.
+- Application databases, browser artifacts, and caches in AppData.zip were not substantively examined.
+- The supplied Thunderbird executable was not executed or subjected to static binary analysis.
+- ZIP integrity was established sufficiently to enumerate entries and read selected files, but a complete CRC verification of every member was not performed.
+- The source VHD itself was not supplied for independent file-system, provenance, or acquisition validation.
+Consequently, the examined evidence cannot yet determine whether the batch script executed, whether Task Manager was actually disabled, which account or process may have initiated the script, or whether any activity was unauthorized.
+7. Prioritized next examination steps
+1
+Directly inspect the Registry policy value
+
+Parse NTUSER.zip/NTUSER.DAT and the relevant user hive identified in RegRipper metadata. Check the exact CurrentVersion\Policies\System\DisableTaskMgr value, key last-write time, and transaction logs where available. This is the highest-priority unresolved question.
+
+
+
+2
+Examine execution evidence
+
+Decode the Prefetch files and relevant EVTX records, especially around October 22, 2026. Look for evidence of cmd.exe, reg.exe, batch-script invocation, process ancestry, and successful or failed Registry modification. Do not equate Prefetch presence with a particular command line.
+
+
+
+3
+Corroborate file acquisition
+
+Examine browser history and download records in AppData.zip, together with the file-report records. Determine whether the URL and script are associated with a recorded download, without following the URL.
+
+
+
+4
+Analyze the Excel and full file reports
+
+Identify relevant worksheets, timestamp fields, and file-system records. Cross-check reported hashes and timestamps against the supplied extracted artifacts where possible.
+
+
+
+5
+Validate the reconstructed timeline
+
+Normalize timestamps to UTC, assess clock reliability, separate file-system metadata from execution evidence, and identify any corroborating or conflicting records.
+
+
+
+Overall conclusion
+The strongest supported finding is the presence of an Internet-zone-associated batch script that contains a command to disable Task Manager for the current user.
+
+There is presently insufficient examined evidence to conclude that the script executed or that a security incident occurred. The direct Registry examination and execution-artifact review are necessary before reaching a stronger conclusion.
+
+The supplied materials contain substantial additional evidence that remains unexamined; accordingly, this assessment should be treated as preliminary rather than an exhaustive forensic opinion.

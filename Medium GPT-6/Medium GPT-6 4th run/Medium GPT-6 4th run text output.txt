@@ -1,0 +1,218 @@
+Digital Forensic Examination Report
+Independent review of seven supplied archives | Evidence dates: 20–22 October 2026 | Examination basis: supplied files only
+1. Scope and evidence examined
+All seven supplied ZIP archives were accessible and successfully opened. ZIP CRC integrity checks completed without reporting an error. This establishes archive-entry readability, not the forensic authenticity or completeness of the underlying evidence.
+Attachment	Contents	Examination status
+NTUSER.zip	3 entries; user registry hive and two logs	Registry hive examined selectively, including key/value structures
+regripper reports complete.zip	32 entries; registry parsing reports	Autopsy summaries and relevant full-report sections examined
+Reports.zip	Excel workbook and CSV-formatted text report	All 31 worksheet names inventoried; selected worksheets read; approximately 220,798 file-report records searched
+winevt - prefetch.zip	629 entries; EVTX, Prefetch, and related artifacts	Prefetch SQLite database queried; selected process records examined; EVTX records not decoded
+16831-Downloads.zip	6 entries; batch file, installer, metadata	Batch file and metadata read; executable not executed or reverse-engineered
+AppData.zip	5,248 entries; application profiles, browser data, databases, slack	Edge History SQLite database queried; other contents inventoried selectively
+config.zip	316 entries; system registry hives, logs, slack, transaction files	Contents inventoried; principal registry conclusions drawn from supplied RegRipper reports rather than independent parsing of all hives
+
+The evidence describes a Windows environment identified as DESKTOP-M4RBE3P, with a profile at C:\Users\Greg and an operating-system designation of Windows 10 Home.
+
+Source: regripper reports complete.zip → reg_0_0/SYSTEM-regripper-81545-autopsy.txt and reg_0_0/SOFTWARE-regripper-81543-autopsy.txt; corroborated by Reports.zip → Excel.xlsx, Operating System Information, row 2.
+
+The archive paths and report metadata refer to an underlying image named img_Case001_PostIncident.vhd. That complete VHD was not supplied. Its filename should not be treated as proof that an incident occurred.
+
+This was a targeted examination of accessible material, not a complete forensic processing of every record or data structure.
+2. Executive assessment
+The strongest finding is that a Windows policy disabling Task Manager was configured, in temporal proximity to execution artifacts for Windows command-line utilities.
+
+The evidence also establishes that a batch file containing a command to set that precise restriction was downloaded shortly beforehand.
+
+Three conclusions have different evidential strengths:
+- High confidence: The supplied user registry hive contains DisableTaskMgr set to DWORD 1, with a last-write timestamp on 21 October 2026 at 22:10:44 UTC.
+- High confidence: Edge recorded a completed download of free-holidays.bat, and its contents include a command capable of configuring that exact setting.
+- Moderate confidence: The command-line activity around 22:10:44 UTC may be connected to the batch file, but the records examined do not independently establish the precise command line, parent process, or responsible actor.
+A separate sequence shows a Thunderbird installer downloaded, executed, and followed by Thunderbird application activity. This is consistent with software installation and normal use; it is not inherently suspicious.
+
+The available evidence does not establish unauthorized access, malicious intent, a particular individual's responsibility, persistence beyond the observed registry setting, exfiltration, or a broader compromise.
+3. Findings, with source references and confidence
+Finding 1 — Task Manager restriction configured
+High confidence · Configuration state
+Direct observation
+
+The NTUSER.DAT registry hive contains the following key and value:
+Registry path
+
+HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System
+
+Value name
+
+DisableTaskMgr
+
+Type
+
+REG_DWORD
+
+Stored value
+
+1
+
+Key last-write (UTC)
+
+2026-10-21 22:10:44.950368
+
+
+The value was observed directly in the registry binary structure, not inferred solely from the batch file.
+
+Precise source: NTUSER.zip → NTUSER.DAT, registry key Software\Microsoft\Windows\CurrentVersion\Policies\System, value DisableTaskMgr; key record at file offset 986760 and value cell at file offset 987144.
+
+Interpretation
+
+The setting is associated with preventing Task Manager access through Windows policy. The evidence supports the conclusion that the restriction was configured in the captured user hive.
+
+It does not independently establish that Task Manager was launched and visibly blocked, whether the restriction remained in force later, or who configured it.
+
+Confidence reasoning: High for the captured registry state because the value, type, key hierarchy, and timestamp were examined directly. Moderate for attributing the change to a particular command or process.
+
+Alternatives and corroboration gaps: Administrative configuration, deliberate testing, scripted configuration, or unauthorized interference remain possible. Command-line and event-level corroboration would be necessary for attribution.
+Finding 2 — Batch file capable of imposing the restriction
+High confidence · File content
+Direct observation
+
+The Downloads archive contains free-holidays.bat, whose complete contents are:
+@echo off
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /t REG_DWORD /d 1 /f
+exit /b
+
+
+Its accompanying Zone.Identifier records ZoneId=3 and the source URL https://chrysanthou.cy/free-holidays/.
+
+This URL is reported only as artifact content; it was not visited.
+
+The browser's SQLite download records identify the same destination filename and show a completed 131-byte download.
+
+Precise sources:
+- 16831-Downloads.zip → 16831-Downloads/16835-free-holidays.bat, complete file.
+- Same archive → 16831-Downloads/16836-free-holidays.bat_Zone.Identifier, lines 1–3.
+- AppData.zip → AppData/Local/Microsoft/Edge/User Data/Default/History, SQLite tables downloads (ID 2) and downloads_url_chains (ID 2).
+- Reports.zip → Excel.xlsx, Web Downloads, row 4.
+- Reports.zip → file-report.txt, CSV record at physical line 7734, with the Zone.Identifier stream at line 7735.
+Interpretation
+
+The batch file is capable of setting the observed registry restriction. The download's recorded start is 21 October 2026 at 22:09:38 UTC, with completion at 22:09:42 UTC.
+
+The registry key's last-write time, approximately one minute later, is consistent with the file being executed.
+
+However, the presence and contents of the file do not themselves prove that it ran. The observed configuration could also have been established through another command or mechanism.
+
+Confidence reasoning: High for file content, provenance metadata, and recorded download; moderate for a causal connection to the registry modification.
+Finding 3 — Command-line execution artifacts near the registry change
+Moderate confidence · Correlation
+Direct observation
+
+The Prefetch database includes:
+Executable	Recorded UTC time	Run count
+REG.EXE	21 Oct 2026, 22:10:44	1
+CMD.EXE	21 Oct 2026, 22:10:44	3 total, including later runs
+
+The CMD Prefetch record also contains later timestamps, including 22:47:28 UTC. Its run count represents the tracked executable, not three proven launches of the batch file.
+
+Precise source: winevt - prefetch.zip → prefetch/1-Autopsy_PF_DB.db3, table prefetch_file_info, rows identified by actual_File_Name values REG.EXE and CMD.EXE, and corresponding prefetch_File_Name values beginning REG.EXE-E7E8BD26 and CMD.EXE-4A81B364.
+
+Related original files are present at:
+- prefetch1/REG.EXE-E7E8BD26.pf
+- prefetch1/CMD.EXE-4A81B364.pf
+Interpretation
+
+The combination of a downloaded script, matching registry setting, and contemporaneous CMD/REG activity makes script execution a plausible explanation.
+
+It is not a proven process chain. Prefetch does not, by itself, provide the complete command-line arguments or establish that cmd.exe launched this particular script.
+
+Confidence reasoning: Moderate for the linkage because the timing and functional correspondence are strong, but parent-child process relationships have not been demonstrated.
+
+An alternative is that another command, administrator, or automated mechanism independently made the registry change.
+Finding 4 — Thunderbird download, installation, and execution
+High confidence · Application activity
+Direct observation
+
+Edge records a completed download of Thunderbird Setup 158.0.exe, with 84,948,744 bytes received.
+
+The Prefetch database records execution of the installer on 21 October 2026 at 18:54:28 UTC, followed by execution of Thunderbird itself. The registry software inventory records Mozilla Thunderbird as installed, including a version 158.0.1 uninstall entry.
+
+Precise sources:
+- AppData.zip → AppData/Local/Microsoft/Edge/User Data/Default/History, SQLite downloads ID 1 and downloads_url_chains ID 1.
+- Reports.zip → Excel.xlsx, Web Downloads, rows 2–3 and Web History, rows 9–11.
+- winevt - prefetch.zip → prefetch/1-Autopsy_PF_DB.db3, prefetch_file_info records beginning THUNDERBIRD SETUP 158.0.EXE-820B251D and THUNDERBIRD.EXE-5119524C.
+- regripper reports complete.zip → reg_0_0/SOFTWARE-regripper-81543-autopsy.txt, <uninstall> section.
+Interpretation
+
+These records support an application installation followed by execution, not merely downloaded-file presence.
+
+Thunderbird activity is not shown to have caused the Task Manager setting, and no such conclusion is warranted simply because both occurred on the same day.
+
+Confidence reasoning: High, because browser download records, Prefetch, and software registration independently support the installation/execution sequence.
+Finding 5 — System and account context
+Direct observation
+
+The registry reports identify a Windows 10 Home environment, computer name DESKTOP-M4RBE3P, and profile C:\Users\Greg, associated with SID ending -1001.
+
+Precise source: regripper reports complete.zip → reg_0_0/SOFTWARE-regripper-81543-autopsy.txt, <WinVersion> and <ProfileList>; reg_0_0/SYSTEM-regripper-81545-autopsy.txt, <CompName>.
+
+Interpretation
+
+This establishes the machine and user-profile context represented in the artifacts. It does not identify the natural person operating the system at any particular time.
+
+Confidence: High for the reported configuration; low for any inference of human identity or responsibility.
+4. Chronological timeline
+The following timeline uses Eastern European Summer Time (EEST, UTC+03:00), as explicitly displayed in Autopsy's file report and workbook. Edge's Chromium timestamps were independently decoded from their stored microseconds-since-1601 format and converted from UTC. Prefetch database Unix timestamps were also interpreted in UTC before conversion.
+Local date and time (EEST)	Event	Evidence category
+20 Oct 2026, 17:46:26	Windows installation date reported	Registry software inventory; RegRipper
+21 Oct, 21:49:23	Thunderbird download-related browser navigation	Edge History; Web History rows 8–11
+21 Oct, 21:49:29–21:49:47	Thunderbird installer download recorded	Edge downloads ID 1
+21 Oct, 21:54:28	Thunderbird installer execution recorded	Prefetch SQLite record
+21 Oct, 21:55 onward	Thunderbird application activity	Thunderbird Prefetch record
+22 Oct, 01:09:38–01:09:42	free-holidays.bat downloaded	Edge downloads ID 2
+22 Oct, 01:10:44	CMD and REG execution records	Prefetch SQLite records
+22 Oct, 01:10:44.950	Registry Policies\System key last-written; DisableTaskMgr=1 present	NTUSER.DAT, registry key/value
+22 Oct, 01:47 approximately	Several user-profile files have late modification or access timestamps	File report; activity not independently attributed
+
+The registry last-write time and REG.EXE execution timestamp are consistent to the second. This is substantial correlation, but does not establish an exact process-command relationship or prove causation.
+
+The final row is useful primarily for understanding the likely capture-time boundary of the supplied artifacts; it is not evidence that each affected file was interactively opened.
+5. Correlations, contradictions, and alternative explanations
+Strongest correlation
+The most significant relationship is among four independent observations:
+1. Edge records the batch-file download at 01:09:38 EEST.
+2. The file contains a command setting DisableTaskMgr=1.
+3. CMD and REG have Prefetch timestamps at 01:10:44 EEST.
+4. The registry key was last-written at 01:10:44 EEST and contains the matching value.
+
+This supports a working hypothesis that the downloaded script was executed and changed the setting. The hypothesis is credible but should remain conditional pending a process-level record, shell artifact, or other independent linkage.
+Other considerations
+- No demonstrated connection to Thunderbird: Its installation predates the batch-file download by several hours. Temporal coexistence alone is not evidence of a shared cause.
+- Browser download status is not execution: Edge's downloads.opened value was 0 for both downloaded files. That field does not exclude opening or launching through Windows Explorer or another mechanism; the Thunderbird Prefetch record independently demonstrates installer execution.
+- Administrative or experimental use is possible: A script containing a single registry command may reflect testing, training, configuration, or unwanted interference. Intent cannot be resolved from its filename or setting alone.
+- No established contradiction between file-report and Prefetch times: The relevant offsets reconcile when the database UTC timestamps are converted to EEST.
+- Potential parser and source limitations: RegRipper output, Autopsy reports, and raw registry records are not interchangeable. A complete validation should account for hive transaction logs, deleted records, parser versions, and source-time interpretation.
+6. Limitations and questions the evidence cannot answer
+The principal limitations are:
+1. The original VHD was not provided. The supplied archives represent selected exports and reports, so completeness, image-level integrity, deleted-space coverage, and acquisition provenance cannot be established.
+2. EVTX contents were not decoded. The winevt/Logs/ directory contains event-log files, including Security, System, PowerShell, and Windows Defender logs. Their presence was inventoried, but no event IDs, event records, or event-message contents were validated. No negative conclusions can be drawn from them.
+3. Prefetch analysis was selective. The Autopsy Prefetch SQLite records were queried for relevant executables. A complete independent parse of every original .pf file and its referenced file paths was not performed.
+4. Registry examination was incomplete. The relevant user-hive key and value were directly examined, but the entire registry, transaction logs, recovered/deleted keys, and all system hives were not exhaustively parsed.
+5. The Excel workbook and AppData material were only partly analyzed. All workbook worksheets were inventoried, but not all rows were examined. In particular, the large Accounts_ Credit Card worksheet was not substantively reviewed, and its title should not be construed as a finding of payment-card evidence. Thunderbird profiles, email content, SQLite databases, browser caches, and slack data were not exhaustively parsed.
+6. The executable was not analyzed as code. Thunderbird Setup 158.0.exe was not executed, disassembled, signature-validated, or hash-compared against an authoritative distribution. The batch file, by contrast, was read as text.
+7. No independently established user attribution. A profile name is not proof of who physically or remotely initiated an action.
+8. No established outcome of interactive restriction enforcement. The hive shows the setting but does not itself prove a particular Task Manager launch failure.
+Consequently, the materials examined do not permit a reliable conclusion about the broader security posture of the system, the existence or absence of other unwanted activity, or the identity and intentions of the operator.
+7. Prioritized next examination steps
+Priority	Examination	Purpose
+1	Decode relevant EVTX logs, especially Security, PowerShell, System, Task Scheduler where present, and Windows Defender	Seek process execution, command-line, session, or other contextual corroboration
+2	Independently parse original CMD and REG Prefetch files, including referenced files and execution timestamps	Strengthen or weaken the connection to the downloaded script
+3	Examine user-registry execution artifacts, shell history, LNKs, Jump Lists, and relevant Explorer artifacts	Identify potential file-launch or interactive activity
+4	Validate registry hive transaction records and relevant policy values across available hives	Establish historical consistency and rule out alternate configuration mechanisms
+5	Examine Edge download history, cache metadata, and related file-system records in detail	Confirm the acquisition sequence and identify additional context
+6	Review the unexamined portions of AppData and the reporting workbook under a defined analytical scope	Identify corroborating or contradictory activity without treating generic application artifacts as suspicious
+7	Obtain the original forensic image, acquisition metadata, and hash manifest if available	Establish evidential completeness, integrity, and defensible chain-of-custody context
+
+Overall conclusion
+The reviewed materials support a defensible finding that the captured Windows user hive contained an active Task Manager-disabling policy setting and that a downloaded batch file contained a command capable of producing precisely that configuration. Contemporaneous CMD and REG execution artifacts strengthen the proposed connection.
+
+The evidence supports the configuration change more strongly than it supports attribution of that change to the specific batch file or any particular person. Neither malice nor unauthorized activity is established. The next decisive examination should focus on event-level and process-level corroboration, rather than treating the close timing alone as proof.
+
+This assessment is confined to the artifacts and records actually examined above.

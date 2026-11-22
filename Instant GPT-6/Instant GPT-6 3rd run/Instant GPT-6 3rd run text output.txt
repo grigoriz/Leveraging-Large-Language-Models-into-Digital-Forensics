@@ -1,0 +1,278 @@
+Independent Digital Forensic Examination
+1. Scope and evidence examined
+Seven ZIP archives were supplied. All seven were accessible, and their directory structures were successfully enumerated. The examination is limited to the supplied materials; no files have been executed, no URLs have been visited, and no external intelligence has been used.
+
+The materials appear to comprise extracted Windows artifacts and forensic-tool reports relating to a Windows 10 environment. The report paths refer to an image named img_Case001_PostIncident.vhd. That filename is a source label, not independent evidence that an incident or compromise occurred.
+Attachment	Inventory	Examination status
+16831-Downloads.zip	6 entries	Archive opened; batch-file contents and associated metadata streams read
+AppData.zip	5,248 entries	Archive enumerated; detailed artifact review limited
+config.zip	316 entries	Archive enumerated; Windows registry hives identified
+NTUSER.zip	3 entries	Archive enumerated; user registry hive identified
+regripper reports complete.zip	32 entries	Archive enumerated; registry-analysis reports identified
+Reports.zip	5 entries	Both reports accessible; workbook structure and targeted file-report records examined
+winevt - prefetch.zip	629 entries	Archive enumerated; event logs, Prefetch artifacts, and a Prefetch database identified
+
+The Excel workbook contains 31 worksheets, including Run Programs, Web Downloads, Web History, Installed Programs, and Interesting Items. These worksheets have not all been individually validated.
+
+Examination boundary: Successful archive access does not mean that every enclosed artifact has been parsed. In particular, raw EVTX, registry, browser, and Prefetch data require further examination before comprehensive conclusions can be made.
+2. Executive assessment
+The strongest evidence concerns a downloaded Windows batch file, free-holidays.bat, containing a command to disable Windows Task Manager for the current user.
+
+The available reports also show CMD.EXE and REG.EXE execution artifacts at the same reported second as a file timestamp associated with that batch file. This is a meaningful correlation warranting further investigation, but it does not independently prove that the batch file was executed or that the intended registry change succeeded.
+
+A separate sequence involving Mozilla Thunderbird is supported by browser download records and program-execution artifacts. This is consistent with ordinary software installation and use.
+
+The present evidence supports these provisional assessments:
+- High confidence: The supplied batch file contains a command intended to disable Task Manager.
+- High confidence: The forensic reports record a browser download associated with that file.
+- Moderate confidence: The command-shell and registry-editor activity may relate to the batch file; process-level attribution is missing.
+- High confidence: Thunderbird installation-related and application-execution activity is recorded.
+- Insufficient evidence: An attacker, unauthorized access, malicious intent, persistence, exfiltration, or successful compromise.
+The batch file is security-relevant because of its functionality, not because its filename or download origin establishes maliciousness.
+3. Findings, with source references and confidence
+Finding 1 — Batch file intended to disable Task Manager
+Direct observation
+
+Attachment: 16831-Downloads.zip
+
+Internal path: 16831-Downloads/16835-free-holidays.bat
+
+The complete 131-byte file contains:
+@echo off
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v DisableTaskMgr /t REG_DWORD /d 1 /f
+exit /b
+
+
+The reg add command specifies the current user's registry hive (HKCU), a DWORD value named DisableTaskMgr, and a value of 1. The /f option instructs the command to overwrite without confirmation.
+
+Interpretation
+
+If successfully executed in the appropriate Windows context, the command is intended to apply a per-user policy disabling Task Manager.
+
+This functionality can be used for unauthorized interference with system administration. It can also occur in controlled testing, demonstrations, administrative restrictions, or experiments.
+
+What the evidence supports: The file contains a concrete configuration-changing command.
+
+What it does not establish: Execution, successful registry modification, duration of any restriction, the person responsible, or intent.
+
+Confidence: High for file contents and intended technical effect, because the actual batch-file bytes were examined.
+Finding 2 — Browser download and origin metadata
+Direct observations
+
+Attachment: Reports.zip
+
+Internal path: Reports/Win10-baseline Excel Report 10-23-2026-20-45-01/Excel.xlsx
+
+Worksheet: Web Downloads, row 4.
+
+The report identifies:
+- Destination: C:\Users\Greg\Downloads\free-holidays.bat
+- Source URL: https://chrysanthou.cy/free-holidays/
+- Application: Microsoft Edge
+- Reported time: 2026-10-22 01:09:38 EEST
+Attachment: 16831-Downloads.zip
+
+Internal path: 16831-Downloads/16836-free-holidays.bat_Zone.Identifier
+
+The stream contains ZoneId=3 and a HostUrl matching the reported download source.
+
+Attachment: Reports.zip
+
+Internal path: Reports/Win10-baseline Files - Text 11-17-2026-08-12-37/file-report.txt
+
+Records: lines 7,734–7,735.
+
+The report associates the batch file and its Zone.Identifier stream with the original path under /Users/Greg/Downloads/.
+
+Interpretation
+
+The browser record and origin metadata independently reinforce the conclusion that the batch file was obtained through a web-download workflow.
+
+ZoneId 3 indicates an Internet-zone association; it is not a malware classification.
+
+What the evidence supports: A recorded Edge download and matching source metadata.
+
+What it does not establish: Who initiated the download, whether the URL was trustworthy, whether the file was opened, or whether it was executed.
+
+Confidence: High for the recorded download and matching metadata. The original browser database has not yet been independently queried for this finding.
+Finding 3 — Command-shell and registry-editor activity
+Direct observations
+
+Attachment: Reports.zip
+
+Internal path: Reports/Win10-baseline Excel Report 10-23-2026-20-45-01/Excel.xlsx
+
+Worksheet: Run Programs.
+Row	Program	Reported time (EEST)	Artifact classification
+43	CMD.EXE	2026-10-22 01:10:44	Prefetch File
+297	REG.EXE	2026-10-22 01:10:44	Prefetch File
+621	TASKMGR.EXE	2026-10-22 01:10:53	Prefetch File
+44	CMD.EXE	2026-10-22 01:47:28	Prefetch File
+853	\Windows\System32\cmd.exe	2026-10-22 01:47:30	BAM
+
+The file report also gives 2026-10-22 01:10:44 EEST as a timestamp for free-holidays.bat (line 7,734). The exact timestamp field must be considered before treating this as a creation or execution event.
+
+Interpretation
+
+The simultaneous reported CMD.EXE and REG.EXE activity is consistent with a command interpreter invoking Windows' registry command-line utility.
+
+The supplied batch file is one plausible explanation because it explicitly invokes reg add.
+
+The subsequent Task Manager activity is also worth investigating, but proximity alone cannot establish that Task Manager was blocked or that a user was testing the policy.
+
+What the evidence supports: Execution-related artifacts for the named Windows utilities.
+
+What it does not establish: Parent-child process relationships, command-line arguments, execution of this specific batch file, registry-write success, or causation.
+
+Confidence: High that the report contains these records; moderate that they relate to the batch file. The association is based primarily on timing and command compatibility.
+
+Alternative explanations include unrelated registry administration, system activity, a scripted test, or another batch file invoking the same utilities.
+Finding 4 — Thunderbird download and execution-related activity
+Direct observations
+
+Attachment: Reports.zip
+
+Workbook: Reports/Win10-baseline Excel Report 10-23-2026-20-45-01/Excel.xlsx
+- Web Downloads, rows 2–3: Thunderbird Setup 158.0 download records at 2026-10-21 21:49:29 EEST, associated with Mozilla download URLs.
+- Run Programs, row 631: Thunderbird installer Prefetch activity at 21:54:28 EEST.
+- Run Programs, rows 632–634: Thunderbird application Prefetch records beginning at 21:55:44 EEST.
+- Run Programs, row 752: Installer execution-related BAM record at 21:55:41 EEST.
+- Run Programs, rows 718–725: Additional Thunderbird application, updater, helper, and crash-helper activity.
+The installer file is also present in 16831-Downloads.zip at:
+
+16831-Downloads/16837-Thunderbird Setup 158.0.exe
+
+Interpretation
+
+These records are consistent with downloading, installing, and running Thunderbird.
+
+The updater, helper, and crash-reporting executables are compatible with normal application operations. Their presence alone does not demonstrate an attack.
+
+What the evidence supports: Download, installer execution-related activity, and Thunderbird application activity.
+
+What it does not establish: The complete installation outcome, email contents, account ownership, malicious activity, or a causal relationship to the batch file.
+
+Confidence: High for the reported activity sequence; moderate for a completed installation, pending independent installation-state validation.
+
+The installer itself was not executed or subjected to a complete binary-integrity examination.
+Finding 5 — Timestamp interpretation requires validation
+Direct observations
+
+Attachment: Reports.zip, workbook Excel.xlsx, worksheets Run Programs and Web Downloads, and file-report.txt.
+
+These reports display timestamps labeled EEST (UTC+03:00).
+
+Attachment: regripper reports complete.zip
+
+Internal path: reg_0_0/SYSTEM-regripper-81545-full.txt
+
+Lines 8,661–8,668 identify the registry key ControlSet001\Control\TimeZoneInformation and report:
+
+TimeZoneKeyName-> Pacific Standard Time
+
+Interpretation
+
+The report's EEST presentation and the registry's Pacific Standard Time configuration are not necessarily contradictory. A forensic application may convert stored timestamps into its configured display timezone.
+
+However, this distinction is important when comparing Windows event logs, registry timestamps, browser records, and Prefetch artifacts.
+
+What the evidence supports: The forensic reports use EEST labels, while one registry report identifies a Pacific time-zone configuration.
+
+What it does not establish: The computer's effective timezone at every relevant event, whether its clock was accurate, or the exact conversion rules used by each forensic parser.
+
+Confidence: High for the reported values; low for any conclusion about historical clock accuracy.
+4. Chronological timeline
+The following timeline preserves the EEST timestamps displayed in the supplied forensic reports. It is not yet an independently normalized UTC timeline.
+Date and time (EEST)	Event or artifact	Source
+Oct 21, 21:49:23	Thunderbird-related browser search and website visit	Reports.zip, Excel.xlsx, Web History, rows 9–11
+Oct 21, 21:49:29	Thunderbird installer download recorded	Web Downloads, rows 2–3
+Oct 21, 21:54:28	Thunderbird installer execution-related Prefetch record	Run Programs, row 631
+Oct 21, 21:55:44	Thunderbird application execution-related record	Run Programs, row 632
+Oct 22, 00:16:09	Additional Thunderbird execution-related activity	Run Programs, row 635
+Oct 22, 01:08:38	Task Manager execution-related artifact	Run Programs, row 620
+Oct 22, 01:09:38	free-holidays.bat download recorded	Web Downloads, row 4
+Oct 22, 01:10:44	CMD.EXE and REG.EXE execution-related artifacts	Run Programs, rows 43 and 297
+Oct 22, 01:10:53	Task Manager execution-related artifact	Run Programs, row 621
+Oct 22, 01:47:28–01:47:30	Additional command-shell and Task Manager activity	Run Programs, rows 44, 622–623, 853
+
+The Run Programs worksheet includes Prefetch-derived execution times, but its rows should not be interpreted as a complete process-creation log. In particular, the displayed Count field is not proof that the program executed that many times at the displayed timestamp.
+
+The sequence establishes temporal relationships, not causal relationships.
+5. Correlations, contradictions, and alternative explanations
+Batch file and registry utility. The batch file's reg add command aligns technically with the recorded REG.EXE activity. Their temporal proximity increases the value of investigating a connection, but command-line or process-parent evidence is needed for reliable attribution.
+
+Task Manager activity. Task Manager artifacts exist both before and after the recorded download. This does not by itself contradict a possible policy change: Prefetch records show execution-related activity, not necessarily successful display of the Task Manager interface. Equally, they do not prove a policy change occurred.
+
+Thunderbird activity. The browser download, installer, and application artifacts are mutually consistent. There is no demonstrated link between Thunderbird and the Task Manager configuration command.
+
+Registry timezone. The EEST report timestamps and Pacific timezone registry value require normalization rather than choosing one as authoritative without validation.
+
+Alternative scenarios. The observed sequence could reflect a controlled demonstration, an administrative experiment, deliberate system restriction, or unauthorized interference. The current evidence does not discriminate reliably among these explanations.
+6. Limitations and questions the evidence cannot answer
+The examination is incomplete at the artifact-parsing level. Although all seven archives were enumerated, the following material has not received comprehensive content analysis:
+- config.zip and NTUSER.zip: raw registry hives, transaction logs, and slack.
+- winevt - prefetch.zip: raw EVTX event records, individual Prefetch structures, and the complete Prefetch SQLite database.
+- AppData.zip: complete browser databases, user activity databases, and application-specific artifacts.
+- regripper reports complete.zip: full report content and parser error files.
+- Reports.zip: all 31 workbook worksheets and the complete 220,800-line text report.
+- 16831-Downloads.zip: full binary examination of the Thunderbird installer.
+The examination therefore cannot yet determine whether DisableTaskMgr was actually set to 1, whether the batch file executed, whether any configuration change persisted, or which process initiated the registry activity.
+
+It also cannot establish the responsible person, authorization, motive, network compromise, data exfiltration, or the completeness of the underlying forensic acquisition.
+
+No independent hash verification, full evidence-image integrity assessment, or comprehensive parser-error review was completed. The original VHD referenced in the reports was not supplied as a complete disk image.
+7. Prioritized next examination steps
+01
+
+Validate the Task Manager registry policy
+
+Parse the supplied NTUSER.DAT and applicable user hives to locate Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableTaskMgr. Examine the value, key timestamps, and transaction logs. Establish which user hive is involved before associating it with a particular account.
+
+
+
+02
+
+Independently parse Prefetch evidence
+
+Examine CMD.EXE, REG.EXE, and TASKMGR.EXE Prefetch files, validating executable paths, run counts, and recorded execution times. Compare these with the Autopsy Prefetch database and workbook results.
+
+
+
+03
+
+Review relevant Windows event logs
+
+Parse the supplied Security, System, PowerShell, and other relevant EVTX logs. Look for available process-creation records, command lines, policy-related events, and user-session context. Record whether the necessary audit events were enabled and retained.
+
+
+
+04
+
+Validate browser and download evidence
+
+Examine the Edge History database directly, reconcile download metadata and timestamps, and inspect any available evidence of subsequent file opening. Preserve the distinction between download completion and execution.
+
+
+
+05
+
+Normalize timestamps and check integrity
+
+Determine the report display-timezone configuration, examine the system's timezone and clock-related evidence, calculate hashes for the supplied files, and review forensic-tool warnings and errors.
+
+
+
+06
+
+Expand to other activity only as supported
+
+Review application artifacts, persistence locations, and network-related records for corroboration. Investigate anomalies on their own merits rather than assuming they belong to the same sequence.
+
+
+
+Overall conclusion
+The most significant identified artifact is a downloaded batch file designed to disable Windows Task Manager for the current user. The reports show nearby command-shell, registry-editor, and Task Manager execution-related activity, making a connection plausible but not proven.
+
+The evidence is sufficient to justify focused examination of a possible Task Manager policy modification. It is not sufficient to conclude that the modification succeeded, that the batch file executed, or that a malicious compromise occurred.
+
+This is a preliminary, evidence-led assessment based on the portions of the supplied materials actually inspected, not a completed forensic examination of every artifact.
